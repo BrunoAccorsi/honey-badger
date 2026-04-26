@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Honey Badger Loader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      min-height: 100vh;
+      background: #f4f0e8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+  <script>
+    const SPRITE = 'frames/sprite.webp';
+    const COLS = 4, FRAME_W = 590, FRAME_H = 282, FRAME_COUNT = 12;
+
+    const POSITIONS = Array.from({ length: FRAME_COUNT }, (_, i) => ({
+      x: (i % COLS) * FRAME_W,
+      y: Math.floor(i / COLS) * FRAME_H,
+    }));
+
+    function HoneyBadgerLoader({ size = 220, fps = 18, paused = false }) {
+      const [frame, setFrame] = React.useState(0);
+      const rafRef = React.useRef(0);
+
+      React.useEffect(() => {
+        if (paused) return;
+        const interval = 1000 / fps;
+        let last = performance.now(), acc = 0;
+        const tick = (now) => {
+          acc += now - last; last = now;
+          while (acc >= interval) { acc -= interval; setFrame(f => (f + 1) % FRAME_COUNT); }
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(rafRef.current);
+      }, [fps, paused]);
+
+      const displayW = size;
+      const displayH = Math.round(size * (FRAME_H / FRAME_W));
+      const scale = size / FRAME_W;
+      const { x, y } = POSITIONS[frame];
+
+      return React.createElement('div', {
+        role: 'img',
+        'aria-label': 'Loading',
+        style: {
+          width: displayW, height: displayH,
+          backgroundImage: `url(${SPRITE})`,
+          backgroundRepeat: 'no-repeat',
+          backgroundPosition: `-${x * scale}px -${y * scale}px`,
+          backgroundSize: `${FRAME_W * COLS * scale}px auto`,
+        }
+      });
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(
+      React.createElement(HoneyBadgerLoader, { size: 280, fps: 18 })
+    );
+  </script>
+</body>
+</html>
