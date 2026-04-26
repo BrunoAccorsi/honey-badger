@@ -1,29 +1,49 @@
 import { memo, useEffect, useRef } from "react";
 import spriteSrc from "./frames/sprite.webp";
 
-// Sprite sheet: 4 cols × 3 rows, each frame 590×282 px
-const COLS = 4;
-const FRAME_W = 590;
-const FRAME_H = 282;
-const FRAME_COUNT = 12;
-const ASPECT = FRAME_H / FRAME_W;
+// ─── Sprite sheet layout ─────────────────────────────────────────────────────
+//
+//   The sprite sheet is a 4-column × 3-row grid of animation frames:
+//
+//   [ 1 ][ 2 ][ 3 ][ 4 ]
+//   [ 5 ][ 6 ][ 7 ][ 8 ]
+//   [ 9 ][10 ][11 ][12 ]
+//
+//   Each frame is 590 × 282 px → total sheet: 2360 × 846 px
+//   We animate by shifting background-position across the grid.
+//
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Unscaled offsets for each frame, computed once at module load
-const OFFSETS: ReadonlyArray<readonly [number, number]> = Array.from(
-  { length: FRAME_COUNT },
-  (_, i) => [(i % COLS) * FRAME_W, Math.floor(i / COLS) * FRAME_H] as const,
-);
+const SPRITE = {
+  cols: 4,
+  frameWidth: 590,
+  frameHeight: 282,
+  frameCount: 12,
+} as const;
 
-interface HoneyBadgerLoaderProps {
-  /** Width in px. Height scales automatically at the native 590:282 ratio. Default: 220 */
+const ASPECT_RATIO = SPRITE.frameHeight / SPRITE.frameWidth;
+
+// Pre-compute each frame's [x, y] offset in the sprite sheet once at module
+// load — avoids repeating the math on every size change.
+const FRAME_OFFSETS = Array.from({ length: SPRITE.frameCount }, (_, frameIndex) => ({
+  x: (frameIndex % SPRITE.cols) * SPRITE.frameWidth,
+  y: Math.floor(frameIndex / SPRITE.cols) * SPRITE.frameHeight,
+}));
+
+// ─── Props ───────────────────────────────────────────────────────────────────
+
+export interface HoneyBadgerLoaderProps {
+  /** Width in px. Height scales automatically to preserve the native aspect ratio. Default: 220 */
   size?: number;
-  /** Frames per second. Default: 18 */
+  /** Animation speed in frames per second. Default: 18 */
   fps?: number;
-  /** Freeze the animation on the current frame. Default: false */
+  /** Pause on the current frame without unmounting. Default: false */
   paused?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 function HoneyBadgerLoaderImpl({
   size = 220,
@@ -32,70 +52,76 @@ function HoneyBadgerLoaderImpl({
   className,
   style,
 }: HoneyBadgerLoaderProps) {
-  const elRef = useRef<HTMLDivElement>(null);
+  const elementRef = useRef<HTMLDivElement>(null);
 
-  // Live fps without re-running the effect on change
+  // Store fps in a ref so the animation loop always reads the latest value
+  // without needing to restart when fps changes.
   const fpsRef = useRef(fps);
   fpsRef.current = fps;
 
   useEffect(() => {
-    const el = elRef.current;
-    if (!el || paused) return;
+    const element = elementRef.current;
+    if (!element || paused) return;
 
-    // Respect a11y preference — show a static frame instead of animating
-    if (
+    // Don't animate if the user has requested reduced motion (accessibility).
+    const prefersReducedMotion =
       typeof matchMedia !== "undefined" &&
-      matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
+      matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReducedMotion) return;
 
-    const scale = size / FRAME_W;
-    // Pre-compute the exact `background-position` string for each frame
-    // so the RAF tick is a single array lookup + one DOM write.
-    const positions = OFFSETS.map(
-      ([x, y]) => `${-x * scale}px ${-y * scale}px`,
+    // Scale the pre-computed offsets to match the current display size.
+    const sizeScale = size / SPRITE.frameWidth;
+    const scaledPositions = FRAME_OFFSETS.map(
+      ({ x, y }) => `${-x * sizeScale}px ${-y * sizeScale}px`,
     );
 
-    let raf = 0;
-    let frame = 0;
-    let last = performance.now();
-    let acc = 0;
+    // Animation loop — runs outside React to avoid re-renders on every frame.
+    // Uses an accumulator so the playback speed stays accurate regardless of
+    // how often the browser calls requestAnimationFrame.
+    let animationFrameId = 0;
+    let currentFrame = 0;
+    let lastTimestamp = performance.now();
+    let elapsedTime = 0;
 
-    const tick = (now: number) => {
-      const interval = 1000 / fpsRef.current;
-      acc += now - last;
-      last = now;
-      let advanced = false;
-      while (acc >= interval) {
-        acc -= interval;
-        frame = (frame + 1) % FRAME_COUNT;
-        advanced = true;
+    function tick(timestamp: number) {
+      const msPerFrame = 1000 / fpsRef.current;
+
+      elapsedTime += timestamp - lastTimestamp;
+      lastTimestamp = timestamp;
+
+      // Advance frames for however much time has passed.
+      if (elapsedTime >= msPerFrame) {
+        elapsedTime %= msPerFrame;
+        currentFrame = (currentFrame + 1) % SPRITE.frameCount;
+        element.style.backgroundPosition = scaledPositions[currentFrame];
       }
-      if (advanced) el.style.backgroundPosition = positions[frame];
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
 
-    return () => cancelAnimationFrame(raf);
+      animationFrameId = requestAnimationFrame(tick);
+    }
+
+    animationFrameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animationFrameId);
   }, [paused, size]);
 
-  const displayW = size;
-  const displayH = Math.round(size * ASPECT);
+  const displayWidth = size;
+  const displayHeight = Math.round(size * ASPECT_RATIO);
+  const sheetWidth = SPRITE.cols * size;
 
   return (
     <div
-      ref={elRef}
+      ref={elementRef}
       role="img"
       aria-label="Loading"
       className={className}
       style={{
-        width: displayW,
-        height: displayH,
+        width: displayWidth,
+        height: displayHeight,
         backgroundImage: `url(${spriteSrc})`,
         backgroundRepeat: "no-repeat",
-        backgroundSize: `${FRAME_W * COLS * (size / FRAME_W)}px auto`,
+        backgroundSize: `${sheetWidth}px auto`,
         backgroundPosition: "0 0",
+        // Tells the browser this element's layout and paint are self-contained,
+        // so it can skip work on surrounding elements when we update the background.
         contain: "strict",
         ...style,
       }}
@@ -103,6 +129,8 @@ function HoneyBadgerLoaderImpl({
   );
 }
 
+// memo prevents re-renders when a parent re-renders with the same props.
 const HoneyBadgerLoader = memo(HoneyBadgerLoaderImpl);
 HoneyBadgerLoader.displayName = "HoneyBadgerLoader";
+
 export default HoneyBadgerLoader;
