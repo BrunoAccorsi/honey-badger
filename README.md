@@ -2,6 +2,8 @@
 
 A lightweight, zero-dependency React sprite animation component. One WebP file, one DOM element, zero React renders per frame.
 
+![Honey Badger Loader demo](demo.gif)
+
 ## Stats
 
 | | |
