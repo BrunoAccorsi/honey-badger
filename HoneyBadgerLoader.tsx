@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from "react";
-import spriteSrc from "./frames/sprite.webp";
+import spriteSrc from "./frames/sprite.svg";
 
 // ─── Sprite sheet layout ─────────────────────────────────────────────────────
 //

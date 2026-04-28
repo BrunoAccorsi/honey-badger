@@ -10,7 +10,7 @@ A lightweight, zero-dependency React sprite animation component. One WebP file, 
 
 | | |
 |---|---|
-| Asset | `sprite.webp` — 157 KB |
+| Asset | `sprite.svg` — 95 KB, infinitely scalable |
 | HTTP requests | 1 |
 | Dependencies | React only (already in your project) |
 | DOM nodes | 1 `<div>` |
@@ -151,4 +151,4 @@ The animation loop runs entirely outside React. After the initial render, a `req
 
 `fps` is stored in a ref so you can change it at runtime without restarting the loop. `prefers-reduced-motion` is respected automatically — users who request reduced motion see a static frame.
 
-The sprite sheet is a 2360×846 px WebP (4 columns × 3 rows, 12 frames total). At the default 220 px size it scales to about 880×334 px in the background.
+The sprite sheet is a vector SVG (4 columns × 3 rows, 12 frames total), sharp at any display size. At the default 220 px size it scales to about 880×334 px in the background.
